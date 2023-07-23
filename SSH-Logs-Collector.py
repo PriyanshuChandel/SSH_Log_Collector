@@ -353,7 +353,7 @@ class linuxApp:
         aboutWinLabel = Label(aboutWin,
                               text=f'Version - 1.1\nDeveloped by Priyanshu\nFor any improvement please reach on '
                                    f'below email\nEmail : chandelpriyanshu8@outlook.com\nMobile : '
-                                   f'+91-8285775109 '
+                                   f'+91-xxxxxxxxxxx '
                                    f'', font=('Helvetica', 9)).place(x=1, y=6)
 
     def runGUI(self):
