@@ -1,203 +1,377 @@
-from os.path import join, exists, dirname
-from os import makedirs
-from tkinter import Tk, Label, Entry, Button, Checkbutton, IntVar, StringVar, Frame
-from tkinter.scrolledtext import ScrolledText
-from threading import Thread
-from pysftp import Connection, CnOpts, ConnectionException, AuthenticationException
-from warnings import filterwarnings
-from bs4 import BeautifulSoup
-from datetime import datetime
-from paramiko import SSHException
+class linuxApp:
+    if not exists('log'):
+        makedirs('log')
+    fileHandler = open(f"log/logs_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt", 'a')
+    authenticationPublicPrivateKey = 'conf/ospf_ssh_private_key'
+    logCollectionPath = 'conf/data_path.conf'
+    equipmentsXml = 'conf/EQPT.xml'
+    userDetail = 'conf/usr.conf'
+    portDetail = 'conf/port.conf'
+    userName = open(userDetail, "r").readline()
+    port = int(open(portDetail, "r").readline())
+    iconFile = join(dirname(__file__), 'icon.ico')
+    aboutIcon = join(dirname(__file__), 'info.ico')
 
-
-icon_file = join(dirname(__file__), 'icon.ico')
-window = Tk()
-window.config(bg='grey')
-window.title('FLC - Developed by Priyanshu')
-window.minsize(width=426, height=475)
-window.maxsize(width=426, height=475)
-window.iconbitmap(icon_file)
-window.resizable(False, False)
-
-if not exists('log'):
-    makedirs('log')
-file_handler = open(f"log/logs_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt", 'a')
-
-
-My_Key = 'conf/ospf_ssh_private_key'
-Data_Path = 'conf/data_path.conf'
-Eqpt_XML = 'conf/EQPT.xml'
-User_Detail = 'conf/usr.conf'
-Port_Detail = 'conf/port.conf'
-
-def establishing_sftp_connection(ip):
-    global SFTP_Connection
-    filterwarnings('ignore')
-    Host_Name = ip
-    User_Name = open(User_Detail, "r").readline()
-    Port = int(open(Port_Detail, "r").readline())
-    Cnopts = CnOpts()
-    Cnopts.hostkeys = None
-    SFTP_Connection = Connection(host=Host_Name, username=User_Name, port=Port, private_key=My_Key, cnopts=Cnopts)
-    CnOpts.hostkeys = None
-    file_handler.write(f'{datetime.now().replace(microsecond=0)} Connection successful to host {Host_Name}.\n')
-
-
-basic_log_path = open(Data_Path, "r").readlines()[0].split(' = ')[1]
-sys_log_path = open(Data_Path, "r").readlines()[1].split(' = ')[1]
-
-
-def threading_btn5():
-    thread_btn5 = Thread(target=btn5_func)
-    thread_btn5.start()
-
-
-def btn5_func():
-    labl10.config(text='Logs collection started...')
-    for ip in ip_list:
+    def __init__(self):
+        self.basicLogPath = ''
+        self.sysLogPath = ''
         try:
-            establishing_sftp_connection(ip)
-            host_name = {v: k for k, v in eqpt_dict.items()}.get(ip)
-            SFTP_Connection.execute(f"rm -f /tmp/Basic_Logs_{host_name}.zip")
-            SFTP_Connection.execute(f"zip -q -r -o /tmp/Basic_Logs_{host_name}.zip {basic_log_path}")
-            SFTP_Connection.get(f"/tmp/Basic_Logs_{host_name}.zip")
-            file_handler.write(
-                f'{datetime.now().replace(microsecond=0)} Basic logs collected successfully for {host_name}.\n')
-        except ConnectionException:
-            file_handler.write(f'{datetime.now().replace(microsecond=0)} Host {ip} unreachable.\n')
-        except AuthenticationException:
-            file_handler.write(
-                f"""{datetime.now().replace(microsecond=0)} Username <{open(User_Detail, "r").readline()}
-            > or public-private pair is not correct.\n""")
-        except SSHException:
-            file_handler.write(f'{datetime.now().replace(microsecond=0)} SSH connection failed to {ip}.\n')
-    labl10.config(text='Logs collection finished, check the log file for status')
+            self.basicLogPath = open(self.logCollectionPath, "r").readlines()[0].split('=')[1]
+            self.sysLogPath = open(self.logCollectionPath, "r").readlines()[1].split('=')[1]
+        except FileNotFoundError:
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] File [{self.logCollectionPath}] '
+                                   f'not found\n')
+        except Exception as e:
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] Something went wrong while opening'
+                                   f' [{self.logCollectionPath}][{e}]\n')
+        self.sftpConnection = None
+        self.equipDict = {}
+        self.ipList = []
+        self.varDict = {}
+        self.checkBoxes = {}
+        self.window = Tk()
+        self.window.config(bg='#F0F0F0')
+        self.window.title('LinApp - v1.0')
+        self.window.geometry('300x550')
+        self.window.iconbitmap(self.iconFile)
+        self.window.resizable(False, False)
+        self.mainLabel = Label(self.window, text='Linux Log Collection', font=('Arial', 15, 'bold'), fg='blue',
+                               bg='#F0F0F0')
+        self.mainLabel.place(x=65, y=5)
+        self.selectHostLabel = Label(self.window, text='Select host', font=(None, 9, 'bold'), bg='#F0F0F0')
+        self.selectHostLabel.place(x=90, y=40)
+        self.checkBoxesScrolledText = ScrolledText(self.window, width=14, height=12, bg='white', bd=4)
+        self.checkBoxesScrolledText.place(x=90, y=60)
 
+        self.basicLogLabelFrame = LabelFrame(self.window, text='Basic Logs', bd=3, labelanchor='n', relief='ridge',
+                                             width=80, height=50)
+        self.basicLogBtn = Button(self.basicLogLabelFrame, text='Pack', command=self.threadingBasicLog,
+                                  state='disabled', bg='light grey', fg='white', font=('Arial', 8, 'bold'))
+        self.basicLogBtn.place(x=17, y=1)
+        self.basicLogLabelFrame.place(x=65, y=268)
+        self.sysLogLabelFrame = LabelFrame(self.window, text='Sys Logs', bd=3, labelanchor='n', relief='ridge',
+                                           width=80, height=50)
+        self.sysLogBtn = Button(self.sysLogLabelFrame, text='Pack', command=self.threadingSysLog,
+                                state='disabled', bg='light grey', fg='white', font=('Arial', 8, 'bold'))
+        self.sysLogBtn.place(x=17, y=1)
+        self.sysLogLabelFrame.place(x=165, y=268)
+        self.customLogLabelFrame = LabelFrame(self.window, text='Custom Logs', bd=3, labelanchor='n', relief='ridge',
+                                              width=290, height=80)
+        self.customLogEntry = Entry(self.customLogLabelFrame, bd=4, width=35, bg='white', state='readonly')
+        self.customLogEntry.place(x=5, y=5)
+        self.customLogBtn = Button(self.customLogLabelFrame, text='Pack', command=self.threadingCustomLog,
+                                   state='disabled', bg='light grey', fg='white', font=('Arial', 8, 'bold'))
+        self.customLogBtn.place(x=240, y=5)
+        self.customLogWarnLabel = Label(self.customLogLabelFrame, text='Note: This option depends on the permissions',
+                                        font=('Ariel', 9, 'bold italic'), bg='#F0F0F0')
+        self.customLogWarnLabel.place(x=3, y=40)
+        self.customLogLabelFrame.place(x=5, y=320)
 
-def threading_btn6():
-    thread_btn6 = Thread(target=btn6_func)
-    thread_btn6.start()
+        self.progressLabelFrame = LabelFrame(self.window, text='Progress', bd=3, labelanchor='n', relief='ridge',
+                                             width=290, height=100)
+        self.progressOverallLabel = Label(self.progressLabelFrame, text='Overall', font=(None, 9, 'bold'), bg='#F0F0F0')
+        self.progressOverallLabel.place(x=1, y=5)
+        self.progressOverall = Progressbar(self.progressLabelFrame, length=230, mode="determinate",
+                                           style="Custom.Overall.Horizontal.TProgressbar")
+        self.progressOverall.place(x=50, y=5)
+        self.progressStyleOverall = Style()
+        self.progressStyleOverall.theme_use('clam')
+        self.progressStyleOverall.configure("Custom.Overall.Horizontal.TProgressbar", background="green", text='0/0')
+        self.progressStyleOverall.layout('Custom.Overall.Horizontal.TProgressbar', [('Horizontal.Progressbar.trough',
+                                                                                     {'children': [
+                                                                                         ('Horizontal.Progressbar.pbar',
+                                                                                          {'side': 'left',
+                                                                                           'sticky': 'ns'})],
+                                                                                         'sticky': 'nswe'}),
+                                                                                    ('Horizontal.Progressbar.label',
+                                                                                     {'sticky': ''})])
 
+        self.progressPassLabel = Label(self.progressLabelFrame, text='Pass', font=(None, 9, 'bold'), bg='#F0F0F0')
+        self.progressPassLabel.place(x=1, y=30)
+        self.progressPass = Progressbar(self.progressLabelFrame, length=230, mode="determinate",
+                                        style="Custom.Pass.Horizontal.TProgressbar")
+        self.progressPass.place(x=50, y=30)
+        self.progressStylePass = Style()
+        self.progressStylePass.theme_use('clam')
+        self.progressStylePass.configure("Custom.Pass.Horizontal.TProgressbar", background="light green", text='0/0')
+        self.progressStylePass.layout('Custom.Pass.Horizontal.TProgressbar', [('Horizontal.Progressbar.trough',
+                                                                               {'children': [
+                                                                                   ('Horizontal.Progressbar.pbar',
+                                                                                    {'side': 'left',
+                                                                                     'sticky': 'ns'})],
+                                                                                'sticky': 'nswe'}),
+                                                                              ('Horizontal.Progressbar.label',
+                                                                               {'sticky': ''})])
 
-def btn6_func():
-    labl10.config(text='Logs collection started...')
-    for ip in ip_list:
+        self.progressFailLabel = Label(self.progressLabelFrame, text='Fail', font=(None, 9, 'bold'), bg='#F0F0F0')
+        self.progressFailLabel.place(x=1, y=55)
+        self.progressFail = Progressbar(self.progressLabelFrame, length=230, mode="determinate",
+                                        style="Custom.Fail.Horizontal.TProgressbar")
+        self.progressFail.place(x=50, y=55)
+        self.progressStyleFail = Style()
+        self.progressStyleFail.theme_use('clam')
+        self.progressStyleFail.configure("Custom.Fail.Horizontal.TProgressbar", background="red", text='0/0')
+        self.progressStyleFail.layout('Custom.Fail.Horizontal.TProgressbar', [('Horizontal.Progressbar.trough',
+                                                                               {'children': [
+                                                                                   ('Horizontal.Progressbar.pbar',
+                                                                                    {'side': 'left',
+                                                                                     'sticky': 'ns'})],
+                                                                                'sticky': 'nswe'}),
+                                                                              ('Horizontal.Progressbar.label',
+                                                                               {'sticky': ''})])
+
+        self.progressLabelFrame.place(x=5, y=400)
+        self.messageLabel = Label(self.window, font=('Arial', 9, 'bold'), bg='#F0F0F0')
+        self.messageLabel.place(x=6, y=505)
+        self.aboutBtn = Button(self.window, text='About', bg='brown', command=self.aboutWindow)
+        self.aboutBtn.place(x=250, y=520)
+
+    def threadingBasicLog(self):
+        def inner():
+            self.basicLogBtn.config(state='disabled', bg='light grey', bd=3, relief='groove')
+            self.basicLogLabelFrame.config(fg='green')
+            self.sysLogBtn.config(state='disabled', bg='light grey')
+            self.customLogEntry.delete(0, 'end')
+            self.customLogEntry.config(state='readonly')
+            self.customLogBtn.config(state='disabled')
+            self.collectFunction('Basic', self.basicLogPath)
+            self.basicLogBtn.config(bd=2, relief='raised')
+            self.basicLogLabelFrame.config(fg='black')
+
+        threadBasicLog = Thread(target=inner)
+        threadBasicLog.start()
+
+    def threadingSysLog(self):
+        def inner():
+            self.sysLogBtn.config(state='disabled', bg='light grey', bd=3, relief='groove')
+            self.sysLogLabelFrame.config(fg='green')
+            self.basicLogBtn.config(state='disabled', bg='light grey')
+            self.customLogEntry.delete(0, 'end')
+            self.customLogEntry.config(state='readonly')
+            self.customLogBtn.config(state='disabled')
+            self.collectFunction('Sys', self.sysLogPath)
+            self.sysLogBtn.config(bd=2, relief='raised')
+            self.sysLogLabelFrame.config(fg='black')
+
+        threadSysLog = Thread(target=inner)
+        threadSysLog.start()
+
+    def threadingCustomLog(self):
+        def inner():
+            self.customLogBtn.config(state='disabled', bg='light grey', bd=3, relief='groove')
+            self.customLogLabelFrame.config(fg='green')
+            self.customLogEntry.config(state='readonly')
+            self.sysLogBtn.config(state='disabled')
+            self.basicLogBtn.config(state='disabled')
+            copyFrom = str(self.customLogEntry.get())
+            self.collectFunction('Custom', copyFrom)
+            self.customLogBtn.config(bd=2, relief='raised')
+            self.customLogLabelFrame.config(fg='black')
+
+        threadCustomLog = Thread(target=inner)
+        threadCustomLog.start()
+
+    def collectFunction(self, logsType, path):
+        self.progressStyleOverall.configure("Custom.Overall.Horizontal.TProgressbar", text=f'0/{len(self.ipList)}')
+        self.progressStylePass.configure("Custom.Pass.Horizontal.TProgressbar", text=f'0/{len(self.ipList)}')
+        self.progressStyleFail.configure("Custom.Fail.Horizontal.TProgressbar", text=f'0/{len(self.ipList)}')
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] User selected {self.ipList}\n')
+        self.disableCheckboxes()
+        startTime = time()
+        self.messageLabel.config(text='')
+        self.messageLabel.config(text='Collecting...')
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] Collecting {logsType} logs...\n')
+        progressDict = {f'{logsType}LogsCollectDone': [],
+                        f'{logsType}LogsCollectFailed': []}
+        logsCollectedDone = [progressDict[x] for x in progressDict.keys()][0]
+        logsCollectedFail = [progressDict[x] for x in progressDict.keys()][1]
+        overallChecked = 0
+        for ip in self.ipList:
+            hostName = {v: k for k, v in self.equipDict.items()}.get(ip)
+            if self.establishSftpConnection(ip, hostName):
+                print('1', logsCollectedDone)
+                print('2', logsCollectedFail)
+                try:
+                    fileName = f"{logsType}Logs_{hostName}_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+                    self.sftpConnection.execute(f"rm -f /tmp/{logsType}Logs_*")
+                    self.sftpConnection.execute(f"zip -q -r -o /tmp/{fileName} {path}")
+                    self.sftpConnection.get(f"/tmp/{fileName}")
+                    self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} {logsType}[{path.strip()}] '
+                                           f'logs collected successfully for [{hostName}_{ip}].\n')
+                    logsCollectedDone.append(f'{hostName}_{ip}')
+                    self.updateProgress(self.progressPass, self.progressStylePass, len(logsCollectedDone),
+                                        len(self.ipList), 'Pass')
+                except FileNotFoundError:
+                    self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] Failed to copy from '
+                                           f'[{hostName}_{ip}], [{path}] is not valid path\n')
+                    logsCollectedFail.append(f'{hostName}_{ip}')
+                    self.updateProgress(self.progressFail, self.progressStyleFail, len(logsCollectedFail),
+                                        len(self.ipList), 'Fail')
+                except Exception as e:
+                    self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] Something went wrong '
+                                           f'while executing remote command for [{hostName}_{ip}]. [{e}]\n')
+                    logsCollectedFail.append(f'{hostName}_{ip}')
+                    self.updateProgress(self.progressFail, self.progressStyleFail, len(logsCollectedFail),
+                                        len(self.ipList), 'Fail')
+            else:
+                logsCollectedFail.append(f'{hostName}_{ip}')
+                self.updateProgress(self.progressFail, self.progressStyleFail, len(logsCollectedFail),
+                                    len(self.ipList), 'Fail')
+            overallChecked += 1
+            self.updateProgress(self.progressOverall, self.progressStyleOverall, overallChecked, len(self.ipList),
+                                'Overall')
+        endTime = time()
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] {logsType} logs collected successfully '
+                               f'for [{len(logsCollectedDone)}] hosts, {logsCollectedDone}\n')
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] {logsType} logs collected failed for '
+                               f'[{len(logsCollectedFail)}] host, {logsCollectedFail}\n')
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] ELAPSED TIME TO COLLECT '
+                               f'{logsType} LOGS is {((endTime - startTime) / 60):.2f} Minutes\n')
+        self.messageLabel.config(text='Finished, check logs!')
+        self.fileHandler.flush()
+        self.enableCheckboxes()
+
+    def establishSftpConnection(self, ip, hostName):
+        filterwarnings('ignore')
         try:
-            establishing_sftp_connection(ip)
-            host_name = {v: k for k, v in eqpt_dict.items()}.get(ip)
-            SFTP_Connection.execute(f"rm -f /tmp/Sys_Logs_{host_name}.zip")
-            SFTP_Connection.execute(f"zip -q -r -o /tmp/Sys_Logs_{host_name}.zip {sys_log_path}")
-            SFTP_Connection.get(f"/tmp/Sys_Logs_{host_name}.zip")
-            file_handler.write(
-                f'{datetime.now().replace(microsecond=0)} Sys logs collected successfully for {host_name}.\n')
+            self.fileHandler.write(f"{datetime.now().replace(microsecond=0)} [Info] Trying to connect host "
+                                   f"[{hostName}_{ip}] \n")
+            cn0pts = CnOpts()
+            cn0pts.hostkeys = None
+            self.sftpConnection = Connection(host=ip, username=self.userName, port=self.port,
+                                             private_key=self.authenticationPublicPrivateKey, cnopts=cn0pts)
+            cn0pts.hostkeys = None
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] Connection successful to host '
+                                   f'[{hostName}_{ip}].\n')
+            self.fileHandler.flush()
+            return True
         except ConnectionException:
-            file_handler.write(f'{datetime.now().replace(microsecond=0)} Host {ip} unreachable.\n')
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] Host[{hostName}_{ip}] '
+                                   f'unreachable.\n')
+            self.fileHandler.flush()
+            return False
         except AuthenticationException:
-            file_handler.write(
-                f"""{datetime.now().replace(microsecond=0)} Username <{open(User_Detail, "r").readline()}
-            > or public-private pair is not correct.\n""")
+            self.fileHandler.write(f"{datetime.now().replace(microsecond=0)} [ERROR] Username "
+                                   f"[{open(self.userDetail, 'r').readline()}] or public-private key pair is not "
+                                   f"correct for Host[{hostName}_{ip}].\n")
+            self.fileHandler.flush()
+            return False
         except SSHException:
-            file_handler.write(f'{datetime.now().replace(microsecond=0)} SSH connection failed to {ip}.\n')
-    labl10.config(text='Logs collection finished, check the log file for status')
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] SSH connection failed to '
+                                   f'Host[{hostName}_{ip}]. A connection attempt failed because the connected party '
+                                   f'did not properly respond after a period of time, or established connection failed '
+                                   f'because connected host has failed to respond\n')
+            self.fileHandler.flush()
+            return False
+        except FileNotFoundError:
+            self.fileHandler.write(f"{datetime.now().replace(microsecond=0)} [ERROR] userName [{self.userDetail}] or "
+                                   f"portDetail [{self.portDetail}] or PPK [{self.authenticationPublicPrivateKey}] file"
+                                   f" is missing for Host[{hostName}_{ip}].\n")
+            self.fileHandler.flush()
+            return False
 
+    def updateProgress(self, progressBar, progressStyle, newVal, totalVal, state):
+        resultVal = f'{newVal}/{totalVal}'
+        progressBar['value'] = round((newVal / totalVal) * 100, 2)
+        progressStyle.configure(f"Custom.{state}.Horizontal.TProgressbar", text=resultVal)
+        self.window.update()
 
-def threading_btn7():
-    thread_btn4 = Thread(target=btn7_func)
-    thread_btn4.start()
+    def checkEntryInput(self, event):
+        if len(self.customLogEntry.get().strip()) > 0:
+            self.disableCheckboxes()
+            self.basicLogBtn.config(state='disabled', bg='light grey')
+            self.sysLogBtn.config(state='disabled', bg='light grey')
+            self.customLogBtn.config(state='normal', bg='green')
+        else:
+            self.enableCheckboxes()
+            self.customLogBtn.config(state='disabled', bg='light grey')
+            self.basicLogBtn.config(state='normal', bg='green')
+            self.sysLogBtn.config(state='normal', bg='green')
 
+    def disableCheckboxes(self):
+        for checkbox in self.checkBoxes.keys():
+            checkbox.config(state='disabled', cursor="arrow")
 
-def btn7_func():
-    labl10.config(text='Logs collection started...')
-    for ip in ip_list:
+    def enableCheckboxes(self):
+        for checkbox in self.checkBoxes.keys():
+            checkbox.config(state='normal', cursor="hand2", bg='white')
+            checkbox.deselect()
+
+    def populateEquipDict(self):
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] Generating Host-IP pair from '
+                               f'[{self.equipmentsXml}]\n')
         try:
-            establishing_sftp_connection(ip)
-            host_name = {v: k for k, v in eqpt_dict.items()}.get(ip)
-            copy_from = str(ent7.get())
-            SFTP_Connection.execute(f"rm -f /tmp/Additional_Logs_{host_name}.zip")
-            SFTP_Connection.execute(f"zip -q -r -o /tmp/Additional_Logs_{host_name}.zip {copy_from}")
-            SFTP_Connection.get(f"/tmp/Additional_Logs_{host_name}.zip")
-            file_handler.write(
-                f'{datetime.now().replace(microsecond=0)} Additional logs collected successfully for {host_name}.\n')
-        except ConnectionException:
-            file_handler.write(f'{datetime.now().replace(microsecond=0)} Host {ip} unreachable.\n')
-        except AuthenticationException:
-            file_handler.write(
-                f"""{datetime.now().replace(microsecond=0)} Username <{open(User_Detail, "r").readline()}
-            > or public-private pair is not correct.\n""")
-        except SSHException:
-            file_handler.write(f'{datetime.now().replace(microsecond=0)} SSH connection failed to {ip}.\n')
-    labl10.config(text='Logs collection finished, check the log file for status')
+            for equip, ip in zip(BeautifulSoup(open(self.equipmentsXml).read(), 'xml')('equipment'),
+                                 BeautifulSoup(open(self.equipmentsXml).read(), 'xml').findAll('ip')):
+                self.equipDict[equip.get('Name')] = ip.text
+                self.varDict[equip.get('Name')] = IntVar(value=0)
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] Host-IP pair generated for '
+                                   f'[{len(self.equipDict)}] hosts.\n{self.equipDict}\n')
+        except FileNotFoundError:
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] file [{self.equipmentsXml}] does '
+                                   f'not exists. Checkbutton can not created\n')
+        except IOError:
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] file [{self.equipmentsXml}] unable'
+                                   f' to read. Checkbutton can not created\n')
+        except ParseError:
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] file [{self.equipmentsXml}] is not'
+                                   f' formatted as valid xml. Checkbutton can not created\n')
+        except Exception as e:
+            self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [ERROR] {e} \n')
+        self.fileHandler.flush()
+
+    def checkboxCommand(self):
+        self.messageLabel.config(text='')
+        self.progressStyleOverall.configure("Custom.Overall.Horizontal.TProgressbar", text='0/0')
+        self.progressStylePass.configure("Custom.Pass.Horizontal.TProgressbar", text='0/0')
+        self.progressStyleFail.configure("Custom.Fail.Horizontal.TProgressbar", text='0/0')
+        self.progressOverall['value'] = 0
+        self.progressPass['value'] = 0
+        self.progressFail['value'] = 0
+        self.ipList = [self.equipDict[key] for key in self.equipDict.keys() if self.varDict[key].get() == 1]
+        for checkbox, checkboxText in self.checkBoxes.items():
+            checkbox.config(bg='light green' if self.varDict[checkboxText].get() == 1 else 'white')
+        if len(self.ipList) >= 1:
+            self.customLogEntry.config(state="normal")
+            self.customLogEntry.delete(0, 'end')
+            self.basicLogBtn.config(state="normal", bg='green')
+            self.sysLogBtn.config(state="normal", bg='green')
+        else:
+            self.customLogEntry.delete(0, 'end')
+            self.customLogEntry.config(state="readonly")
+            self.customLogBtn.config(state="disabled", bg='light grey')
+            self.basicLogBtn.config(state="disabled", bg='light grey')
+            self.sysLogBtn.config(state="disabled", bg='light grey')
+
+    def aboutWindow(self):
+        aboutWin = Toplevel(self.window)
+        aboutWin.grab_set()
+        aboutWin.geometry('285x90')
+        aboutWin.resizable(False, False)
+        aboutWin.title('About')
+        aboutWin.iconbitmap(self.aboutIcon)
+        aboutWinLabel = Label(aboutWin,
+                              text=f'Version - 1.1\nDeveloped by Priyanshu\nFor any improvement please reach on '
+                                   f'below email\nEmail : chandelpriyanshu8@outlook.com\nMobile : '
+                                   f'+91-8285775109 '
+                                   f'', font=('Helvetica', 9)).place(x=1, y=6)
+
+    def runGUI(self):
+        self.customLogEntry.bind("<KeyRelease>", self.checkEntryInput)
+        self.populateEquipDict()
+        for equips in self.equipDict.keys():
+            var = IntVar()
+            checkButtons = Checkbutton(self.checkBoxesScrolledText, text=equips, variable=var, bg='white',
+                                       cursor="hand2", command=self.checkboxCommand)
+            self.varDict[equips] = var
+            self.checkBoxes[checkButtons] = equips
+            checkButtons.pack()
+            self.checkBoxesScrolledText.window_create('end', window=checkButtons)
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} Checkboxes created.. \n')
+        self.fileHandler.flush()
+        self.window.mainloop()
 
 
-labl1 = Label(window, text='Linux Log Collection', font=(None, 12, 'bold'), bg='grey').place(x=145, y=1)
-lab2 = Label(window, text='Enter IP address of host (press spacebar to enter)', wraplength=170, justify='left',
-             font=(None, 8, 'bold'), bg='grey').place(x=6, y=26)
-stringvar_2 = StringVar()
-
-
-def add_additional_ip(self):
-    if not len(stringvar_2.get()) == 0:
-        eqpt_dict['Additional_Host'] = stringvar_2.get()
-        var_dict['Additional_Host'] = IntVar(value=1)
-        ip_list.append(eqpt_dict.get('Additional_Host'))
-    if len(stringvar_2.get()) == 0:
-        ip_list.remove(eqpt_dict.get('Additional_Host'))
-        eqpt_dict.pop('Additional_Host')
-        var_dict.pop('Additional_Host')
-
-
-ent2 = Entry(window, bd=4, width=32, bg='lavender', textvariable=stringvar_2)
-ent2.place(x=153, y=30)
-ent2.bind("<space>", add_additional_ip)
-lab3 = Label(window, text='OR', font=(None, 9, 'bold'), bg='grey').place(x=380, y=31)
-
-labl4 = Label(window, text='Select host from below', font=(None, 9, 'bold'), bg='grey').place(x=150, y=60)
-text4 = ScrolledText(window, width=14, height=12, bg='white', bd=4)
-text4.place(x=145, y=80)
-eqpt_dict = dict()
-for eqpt, ip in zip(BeautifulSoup(open(Eqpt_XML).read(),'xml')('equipment'), BeautifulSoup(open(Eqpt_XML).read(),'xml').findAll('ip')):
-    eqpt_dict[eqpt.get('Name')] = ip.text
-ip_list = list()
-
-
-def checkbox_command():
-    global ip_list
-    ip_list = [eqpt_dict[key] for key in eqpt_dict.keys() if var_dict[key].get() == 1]
-
-
-var_dict = dict()
-for eqpts in eqpt_dict.keys():
-    var_dict[eqpts] = IntVar(value=0)
-    checkbutton4 = Checkbutton(text4, text=eqpts, variable=var_dict[eqpts], onvalue=1, offvalue=0, bg='white',
-                               cursor="hand2", command=checkbox_command)
-    checkbutton4.pack()
-    text4.window_create('end', window=checkbutton4)
-
-labl5 = Label(window, text='Click here if you want to collect basic logs from </data/logs/>',
-              font=(None, 9, 'bold'), bg='grey').place(x=6, y=290)
-btn5 = Button(window, text='Pack', command=threading_btn5, bg='green')
-btn5.place(x=380, y=288)
-
-labl6 = Label(window, text='Click here if you want to collect syslog from </var/log/>', font=(None, 9, 'bold'),
-              bg='grey').place(x=6, y=320)
-btn6 = Button(window, text='Pack', command=threading_btn6, bg='green')
-btn6.place(x=380, y=318)
-
-labl7 = Label(window, text='Specify directory to collect anything else', font=(None, 9, 'bold'), bg='grey',
-              wraplength=178, justify='left').place(x=6, y=350)
-ent7 = Entry(window, bd=4, width=32, bg='lavender')
-ent7.place(x=167, y=354)
-btn7 = Button(window, text='Pack', command=threading_btn7, bg='green')
-btn7.place(x=380, y=354)
-
-labl8 = Label(window, text='Note: This option depends on the permissions', font=(None, 9, 'bold'), bg='grey')
-labl8.place(x=6, y=384)
-
-frame9 = Frame(window, bg="white", bd=20, width=410,
-               height=60, cursor="target").place(x=6, y=406)
-labl9 = Label(frame9, text='Status:', font=(None, 9, 'bold'), bg='white')
-labl9.place(x=6, y=406)
-
-labl10 = Label(window, font=(None, 9, 'bold'), bg='white', wraplength=300, justify='left')
-labl10.place(x=6, y=426)
-window.mainloop()
+if __name__ == '__main__':
+    flc_app = linuxApp()
+    flc_app.runGUI()
