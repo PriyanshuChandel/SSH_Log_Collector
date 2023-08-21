@@ -8,11 +8,12 @@ from pysftp import Connection, CnOpts, ConnectionException, AuthenticationExcept
 from warnings import filterwarnings
 from bs4 import BeautifulSoup
 from datetime import datetime
-from paramiko import SSHException 
+from paramiko import SSHException
 from time import time
 from xml.etree.ElementTree import ParseError
 
-class linuxApp:
+
+class FLCApp:
     if not exists('log'):
         makedirs('log')
     fileHandler = open(f"log/logs_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt", 'a')
@@ -45,13 +46,14 @@ class linuxApp:
         self.checkBoxes = {}
         self.window = Tk()
         self.window.config(bg='#F0F0F0')
-        self.window.title('LinApp - v1.0')
+        self.window.title('LinApp - v1.1')
+
         self.window.geometry('300x550')
         self.window.iconbitmap(self.iconFile)
         self.window.resizable(False, False)
         self.mainLabel = Label(self.window, text='Linux Log Collection', font=('Arial', 15, 'bold'), fg='blue',
                                bg='#F0F0F0')
-        self.mainLabel.place(x=65, y=5)
+        self.mainLabel.place(x=60, y=5)
         self.selectHostLabel = Label(self.window, text='Select host', font=(None, 9, 'bold'), bg='#F0F0F0')
         self.selectHostLabel.place(x=90, y=40)
         self.checkBoxesScrolledText = ScrolledText(self.window, width=14, height=12, bg='white', bd=4)
@@ -113,7 +115,7 @@ class linuxApp:
                                                                                    ('Horizontal.Progressbar.pbar',
                                                                                     {'side': 'left',
                                                                                      'sticky': 'ns'})],
-                                                                                'sticky': 'nswe'}),
+                                                                                   'sticky': 'nswe'}),
                                                                               ('Horizontal.Progressbar.label',
                                                                                {'sticky': ''})])
 
@@ -130,7 +132,7 @@ class linuxApp:
                                                                                    ('Horizontal.Progressbar.pbar',
                                                                                     {'side': 'left',
                                                                                      'sticky': 'ns'})],
-                                                                                'sticky': 'nswe'}),
+                                                                                   'sticky': 'nswe'}),
                                                                               ('Horizontal.Progressbar.label',
                                                                                {'sticky': ''})])
 
@@ -239,8 +241,13 @@ class linuxApp:
                                f'for [{len(logsCollectedDone)}] hosts, {logsCollectedDone}\n')
         self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] {logsType} logs collected failed for '
                                f'[{len(logsCollectedFail)}] host, {logsCollectedFail}\n')
-        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} [Info] ELAPSED TIME TO COLLECT '
-                               f'{logsType} LOGS is {((endTime - startTime) / 60):.2f} Minutes\n')
+        elapsedTime = endTime - startTime
+        hours, remainder = divmod(elapsedTime, 3600)
+        minutes, remainder = divmod(remainder, 60)
+        seconds, milliseconds = divmod(remainder, 1)
+        self.fileHandler.write(f'{datetime.now().replace(microsecond=0)} ELAPSED TIME TO COLLECT {logsType} LOGS is '
+                               f'{int(hours)} hours {int(minutes)} minutes {int(seconds)} seconds '
+                               f'{int(milliseconds * 1000)} milliseconds')
         self.messageLabel.config(text='Finished, check logs!')
         self.fileHandler.flush()
         self.enableCheckboxes()
@@ -367,7 +374,7 @@ class linuxApp:
         aboutWinLabel = Label(aboutWin,
                               text=f'Version - 1.1\nDeveloped by Priyanshu\nFor any improvement please reach on '
                                    f'below email\nEmail : chandelpriyanshu8@outlook.com\nMobile : '
-                                   f'+91-xxxxxxxxxxx '
+                                   f'+91-8285775109 '
                                    f'', font=('Helvetica', 9)).place(x=1, y=6)
 
     def runGUI(self):
@@ -387,5 +394,5 @@ class linuxApp:
 
 
 if __name__ == '__main__':
-    flc_app = linuxApp()
+    flc_app = FLCApp()
     flc_app.runGUI()
