@@ -13,7 +13,7 @@ from time import time
 from xml.etree.ElementTree import ParseError
 
 
-class FLCApp:
+class LinuxApp:
     if not exists('log'):
         makedirs('log')
     fileHandler = open(f"log/logs_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt", 'a')
@@ -46,7 +46,7 @@ class FLCApp:
         self.checkBoxes = {}
         self.window = Tk()
         self.window.config(bg='#F0F0F0')
-        self.window.title('LinApp - v1.1')
+        self.window.title('FLC - v1.1')
 
         self.window.geometry('300x550')
         self.window.iconbitmap(self.iconFile)
@@ -394,5 +394,5 @@ class FLCApp:
 
 
 if __name__ == '__main__':
-    flc_app = FLCApp()
+    flc_app = LinuxApp()
     flc_app.runGUI()
